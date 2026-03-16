@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>CYBERLIFE program studyjny</title>
+
+<style>
+
+body{
+background:black;
+color:white;
+font-family:Arial;
+text-align:center;
+}
+
+canvas{
+border:1px solid white;
+margin-top:10px;
+}
+
+input{
+width:70px;
+margin:3px;
+}
+
+button{
+margin:4px;
+padding:6px 12px;
+}
+
+#stats{
+margin-top:10px;
+line-height:1.6;
+}
+
+#footer{
+margin-top:40px;
+max-width:900px;
+margin-left:auto;
+margin-right:auto;
+white-space:pre-line;
+font-size:14px;
+color:#cccccc;
+}
+
+</style>
+</head>
+
+<body>
+
+<h2>CYBERLIFE program studyjny</h2>
+
+Szerokość <input id="width" type="number" value="100">
+Wysokość <input id="height" type="number" value="100"><br>
+
+Początkowe komórki
+<input id="initialCells" type="number" value="1500"><br>
+
+Kroki/sek
+<input id="speed" type="number" value="100"><br>
+
+Krople na krok
+<input id="dropsPerStep" type="number" value="0"><br>
+
+1 kropla co ile kroków
+<input id="dropInterval" type="number" value="0"><br>
+
+Skocz do kroku
+<input id="jumpStep" type="number" value="0">
+<button onclick="jumpToStep()">SKOCZ</button>
+
+<br>
+
+<button onclick="start()">START</button>
+<button onclick="stop()">STOP</button>
+<button onclick="oneStep()">KROK</button>
+<button onclick="stepBack()">WSTECZ</button>
+<button onclick="reset()">RESET</button>
+
+<br><br>
+
+<canvas id="lifeCanvas"></canvas>
+
+<div id="stats">
+
+<p>Krok: <span id="step">0</span></p>
+
+<p>Biomasa: <span id="bio">0</span></p>
+
+<p>
+świeże (yellow): <span id="cYellow">0</span><br>
+stare (green): <span id="cGreen">0</span><br>
+powroty1 (red): <span id="cR1">0</span><br>
+powroty2 (blue): <span id="cR2">0</span><br>
+powroty3 (brown): <span id="cR3">0</span><br>
+nowe (magenta): <span id="cMag">0</span><br>
+krople (white): <span id="cDrop">0</span><br>
+mysz (turquoise): <span id="cMouse">0</span>
+</p>
+
+</div>
+
+<script>
+
+let width=100
+let height=100
+let cellSize=6
+
+let grid=[]
+let age=[]
+let colorGrid=[]
+let dropGrid=[]
+let mouseGrid=[]
+
+let prev1=[]
+let prev2=[]
+let prev3=[]
+let prev4=[]
+
+let history=[]
+let historyAge=[]
+let historyColor=[]
+let historyDrop=[]
+let historyMouse=[]
+let historyStats=[]
+
+let step=0
+let maxStep=0
+
+let running=false
+let timer=null
+
+const canvas=document.getElementById("lifeCanvas")
+const ctx=canvas.getContext("2d")
+
+function clone(a){
+return a.map(r=>r.slice())
+}
+
+function empty(){
+
+let a=[]
+
+for(let y=0;y<height;y++){
+a[y]=[]
+for(let x=0;x<width;x++) a[y][x]=0
+}
+
+return a
+}
+
+function createGrid(){
+
+grid=empty()
+age=empty()
+colorGrid=empty()
+dropGrid=empty()
+mouseGrid=empty()
+
+prev1=empty()
+prev2=empty()
+prev3=empty()
+prev4=empty()
+
+}
+
+function randomCells(n){
+
+let placed=0
+
+while(placed<n){
+
+let x=Math.floor(Math.random()*width)
+let y=Math.floor(Math.random()*height)
+
+if(grid[y][x]==0){
+
+grid[y][x]=1
+age[y][x]=1
+placed++
+
+}
+
+}
+
+}
+
+function neighbors(x,y){
+
+let n=0
+
+for(let dy=-1;dy<=1;dy++)
+for(let dx=-1;dx<=1;dx++){
+
+if(dx==0 && dy==0) continue
+
+let nx=x+dx
+let ny=y+dy
+
+if(nx>=0 && nx<width && ny>=0 && ny<height)
+if(grid[ny][nx]) n++
+
+}
+
+return n
+
+}
+
+function lifeStep(){
+
+let newGrid=empty()
+let newAge=empty()
+
+for(let y=0;y<height;y++)
+for(let x=0;x<width;x++){
+
+let n=neighbors(x,y)
+
+if(grid[y][x]){
+
+if(n==2||n==3){
+
+newGrid[y][x]=1
+newAge[y][x]=age[y][x]+1
+
+}
+
+}else{
+
+if(n==3){
+
+newGrid[y][x]=1
+newAge[y][x]=1
+
+}
+
+}
+
+}
+
+grid=newGrid
+age=newAge
+
+}
+
+function addDrops(){
+
+dropGrid=empty()
+
+let drops=parseInt(document.getElementById("dropsPerStep").value)
+let interval=parseInt(document.getElementById("dropInterval").value)
+
+for(let i=0;i<drops;i++){
+
+let x=Math.floor(Math.random()*width)
+let y=Math.floor(Math.random()*height)
+
+grid[y][x]=1
+age[y][x]=1
+dropGrid[y][x]=1
+
+}
+
+if(interval>0 && step%interval==0){
+
+let x=Math.floor(Math.random()*width)
+let y=Math.floor(Math.random()*height)
+
+grid[y][x]=1
+age[y][x]=1
+dropGrid[y][x]=1
+
+}
+
+}
+
+function updateColors(){
+
+for(let y=0;y<height;y++)
+for(let x=0;x<width;x++){
+
+if(grid[y][x]==0){
+colorGrid[y][x]="black"
+continue
+}
+
+let col=null
+
+if(age[y][x]==2) col="#ffff00"
+if(age[y][x]>=3) col="#228b22"
+
+if(prev1[y][x]==0 && prev2[y][x]==1) col="#ff0000"
+if(prev1[y][x]==0 && prev2[y][x]==0 && prev3[y][x]==1) col="#0000ff"
+if(prev1[y][x]==0 && prev2[y][x]==0 && prev3[y][x]==0 && prev4[y][x]==1) col="#8b4513"
+
+if(dropGrid[y][x]==1) col="#ffffff"
+if(mouseGrid[y][x]==1) col="#40e0d0"
+
+if(col==null && age[y][x]==1) col="#ff00ff"
+
+colorGrid[y][x]=col
+
+}
+
+}
+
+function draw(){
+
+ctx.fillStyle="black"
+ctx.fillRect(0,0,canvas.width,canvas.height)
+
+for(let y=0;y<height;y++)
+for(let x=0;x<width;x++){
+
+if(grid[y][x]){
+
+ctx.fillStyle=colorGrid[y][x]
+ctx.fillRect(x*cellSize,y*cellSize,cellSize,cellSize)
+
+}
+
+}
+
+ctx.strokeStyle="#003300"
+ctx.lineWidth=0.3
+
+for(let x=0;x<=width;x++){
+ctx.beginPath()
+ctx.moveTo(x*cellSize,0)
+ctx.lineTo(x*cellSize,height*cellSize)
+ctx.stroke()
+}
+
+for(let y=0;y<=height;y++){
+ctx.beginPath()
+ctx.moveTo(0,y*cellSize)
+ctx.lineTo(width*cellSize,y*cellSize)
+ctx.stroke()
+}
+
+}
+
+function countStats(){
+
+let s={
+bio:0,
+yellow:0,
+green:0,
+mag:0,
+r1:0,
+r2:0,
+r3:0,
+drop:0,
+mouse:0
+}
+
+for(let y=0;y<height;y++)
+for(let x=0;x<width;x++){
+
+if(grid[y][x]){
+
+s.bio++
+
+let c=colorGrid[y][x]
+
+if(c=="#ffff00") s.yellow++
+if(c=="#228b22") s.green++
+if(c=="#ff00ff") s.mag++
+if(c=="#ff0000") s.r1++
+if(c=="#0000ff") s.r2++
+if(c=="#8b4513") s.r3++
+if(c=="#ffffff") s.drop++
+if(c=="#40e0d0") s.mouse++
+
+}
+
+}
+
+return s
+
+}
+
+function showStats(s){
+
+document.getElementById("step").textContent=step
+document.getElementById("bio").textContent=s.bio
+document.getElementById("cYellow").textContent=s.yellow
+document.getElementById("cGreen").textContent=s.green
+document.getElementById("cMag").textContent=s.mag
+document.getElementById("cR1").textContent=s.r1
+document.getElementById("cR2").textContent=s.r2
+document.getElementById("cR3").textContent=s.r3
+document.getElementById("cDrop").textContent=s.drop
+document.getElementById("cMouse").textContent=s.mouse
+
+}
+
+function simulate(){
+
+if(step < maxStep){
+
+step++
+
+grid=clone(history[step])
+age=clone(historyAge[step])
+colorGrid=clone(historyColor[step])
+dropGrid=clone(historyDrop[step])
+mouseGrid=clone(historyMouse[step])
+
+draw()
+showStats(historyStats[step])
+
+return
+}
+
+prev4=clone(prev3)
+prev3=clone(prev2)
+prev2=clone(prev1)
+prev1=clone(grid)
+
+lifeStep()
+addDrops()
+updateColors()
+
+step++
+
+history[step]=clone(grid)
+historyAge[step]=clone(age)
+historyColor[step]=clone(colorGrid)
+historyDrop[step]=clone(dropGrid)
+historyMouse[step]=clone(mouseGrid)
+
+let s=countStats()
+historyStats[step]=s
+
+draw()
+showStats(s)
+
+maxStep=step
+
+}
+
+function oneStep(){ if(!running) simulate() }
+
+function stepBack(){
+
+if(step<=0) return
+
+step--
+
+grid=clone(history[step])
+age=clone(historyAge[step])
+colorGrid=clone(historyColor[step])
+dropGrid=clone(historyDrop[step])
+mouseGrid=clone(historyMouse[step])
+
+draw()
+showStats(historyStats[step])
+
+}
+
+function jumpToStep(){
+
+let t=parseInt(document.getElementById("jumpStep").value)
+
+if(t<0) t=0
+if(t>maxStep) t=maxStep
+
+step=t
+
+grid=clone(history[step])
+age=clone(historyAge[step])
+colorGrid=clone(historyColor[step])
+dropGrid=clone(historyDrop[step])
+mouseGrid=clone(historyMouse[step])
+
+draw()
+showStats(historyStats[step])
+
+}
+
+function start(){
+
+if(running) return
+
+let speed=parseFloat(document.getElementById("speed").value)
+
+running=true
+
+timer=setInterval(simulate,1000/speed)
+
+}
+
+function stop(){
+
+running=false
+clearInterval(timer)
+
+}
+
+function reset(){
+
+stop()
+
+width=parseInt(document.getElementById("width").value)
+height=parseInt(document.getElementById("height").value)
+
+canvas.width=width*cellSize
+canvas.height=height*cellSize
+
+createGrid()
+
+randomCells(parseInt(document.getElementById("initialCells").value))
+
+updateColors()
+
+step=0
+maxStep=0
+
+history=[]
+historyAge=[]
+historyColor=[]
+historyDrop=[]
+historyMouse=[]
+historyStats=[]
+
+history[0]=clone(grid)
+historyAge[0]=clone(age)
+historyColor[0]=clone(colorGrid)
+historyDrop[0]=clone(dropGrid)
+historyMouse[0]=clone(mouseGrid)
+
+let s=countStats()
+historyStats[0]=s
+
+draw()
+showStats(s)
+
+}
+
+canvas.addEventListener("click",function(e){
+
+let rect=canvas.getBoundingClientRect()
+
+let x=Math.floor((e.clientX-rect.left)/cellSize)
+let y=Math.floor((e.clientY-rect.top)/cellSize)
+
+grid[y][x]=grid[y][x]?0:1
+mouseGrid[y][x]=grid[y][x]?1:0
+age[y][x]=1
+
+updateColors()
+draw()
+
+})
+
+canvas.addEventListener("wheel",function(e){
+
+e.preventDefault()
+
+if(running) return
+
+if(e.deltaY>0) oneStep()
+else stepBack()
+
+})
+
+document.addEventListener("keydown",function(e){
+
+if(e.target.tagName==="INPUT") return
+
+if(e.code==="Space"){
+e.preventDefault()
+running?stop():start()
+}
+
+if(e.code==="ArrowLeft"){
+e.preventDefault()
+oneStep()
+}
+
+if(e.code==="ArrowRight"){
+e.preventDefault()
+stepBack()
+}
+
+})
+
+reset()
+
+</script>
+
+<div id="footer">
+
+Program studyjny do symulacji gry w życie Johna Conwaya
+
+Możliwość ustawiania wysokości i szerokości planszy  
+Możliwość ustawiania początkowej liczby losowo rozłożonych komórek  
+Możliwość ustawiania początkowej prędkości symulacji  
+Możliwość ustawiania prędkości pojawiania się losowo umieszczanych komórek (kropli)  
+
+Program zapisuje symulację
+
+START uruchamia symulację lub odczyt  
+STOP zatrzymuje symulację lub odczyt  
+KROK posuwa symulację lub odczyt o jeden krok do przodu  
+WSTECZ cofa symulację lub odczyt o jeden krok do tyłu  
+
+Te same funkcje wykonują klawisze strzałki W LEWO oraz W PRAWO oraz SCROLL  
+
+Kliknięcie myszką wstawia komórkę na planszę  
+
+Możliwość skoczenia do konkretnego zapisanego kroku  
+
+RESET kasuje zapis oraz ponownie losuje stan początkowy
+
+Liczniki pokazują:
+
+Biomasę – liczbę komórek na planszy  
+Świeże – żółte  
+Stare – zielone  
+Powroty1 – czerwone  
+Powroty2 – niebieskie  
+Powroty3 – brązowe  
+Nowe – magenta  
+Krople – białe  
+Komórki rysowane myszką – turkusowe
+
+Program został napisany w marcu 2026 r. w ramach projektu badawczego CYBERLIFE przez darmową wersję ChatGPT przy pomocy promptów udzielanych przez badacza niezależnego Romana Godlewskiego, Bydgoszcz, Polska.
+
+Projekt CYBERLIFE jest częścią projektu badawczego CYBERMIND.  
+Projekt CYBERMIND jest w całości finansowany ze środków własnych Romana Godlewskiego.
+
+Program może być wykorzystywany przez każdą osobę do dowolnego celu.
+
+</div>
+
+</body>
+</html>
